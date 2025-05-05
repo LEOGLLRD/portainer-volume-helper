@@ -1,0 +1,18 @@
+services:
+  helper:
+    build:
+      dockerfile: Dockerfile
+    volumes:
+      - type: volume
+        source: shared-volume
+        target: /volumes
+        volume:
+          subpath: ""
+    environment:
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "0:8000"
+volumes:
+  shared-volume:
+    name: "shared-volume"
+    external: true

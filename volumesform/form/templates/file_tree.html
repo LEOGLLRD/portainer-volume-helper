@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>File Tree</title>
+    <style>
+        /* Structure des listes */
+        /* Structure des listes */
+        ul {
+            list-style: none;
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        li {
+            margin: 2px 0;
+            position: relative;
+        }
+
+        /* Conteneur de chaque élément (dossier ou fichier) */
+        .folder-header {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 6px;
+            padding: 4px;
+            max-width: 100%;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        /* Partie gauche contenant flèche + icône + nom */
+        .item-left {
+            display: block;
+            align-items: center;
+            gap: 6px;
+            overflow: hidden;
+            flex: 1;
+        }
+
+        /* Icônes */
+        .folder-icon,
+        .file-icon {
+            font-size: 18px;
+        }
+
+        /* Flèche */
+        .arrow {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        /* Libellés */
+        .folder-label,
+        .file-label {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Surbrillance au survol */
+        .folder-header:hover {
+            background-color: #f0f0f0;
+        }
+
+        /* Bouton menu ⋯ */
+        .menu-btn {
+            background: none;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        /* Menu déroulant contextuel */
+        .context-menu {
+            position: fixed;
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            z-index: 999;
+            box-shadow: 0px 2px 6px rgba(0, 0, 0, 0.2);
+            min-width: 120px;
+        }
+
+        .context-menu.hidden {
+            display: none;
+        }
+
+        .context-menu a,
+        .context-menu button,
+        .context-menu label {
+            background: none;
+            border: none;
+            cursor: pointer;
+            text-align: left;
+            font-size: 14px;
+            padding: 2px 6px;
+        }
+
+        .context-menu a:hover,
+        .context-menu button:hover,
+        .context-menu label:hover {
+            background: #ddd;
+        }
+
+        /* Sous-listes */
+        li.folder > ul {
+            margin-top: 4px;
+            padding-left: 15px;
+        }
+
+        /* Dossiers fermés */
+        .hidden {
+            display: none;
+        }
+
+        /* Drag & drop */
+        .folder-header.drag-over {
+            border: 2px dashed #007bff;
+            background-color: #e0f0ff;
+        }
+
+
+    </style>
+</head>
+<body>
+<h1>Arborescence de fichiers du dossier : /{{ root_name }}</h1>
+<h3>Référez-vous à votre Docker Compose pour savoir à quel volume ce dossier correspond.</h3>
+<div style="margin-bottom: 1rem;">
+    <form action="{% url 'create_folder' %}" method="post" style="display: flex; gap: 6px; align-items: center;">
+        {% csrf_token %}
+        <input type="hidden" name="parent_path" value="">
+        <input type="text" name="folder_name" placeholder="Nom du nouveau dossier" required>
+        <button type="submit">📂 Créer à la racine</button>
+    </form>
+</div>
+{% include "file_tree_recursive.html" with nodes=tree %}
+<script>
+    function toggleFolder(arrow) {
+        event.stopPropagation();
+        const ul = arrow.closest('li').querySelector('ul');
+        if (ul) {
+            ul.classList.toggle("hidden");
+            arrow.textContent = ul.classList.contains("hidden") ? "▶️" : "🔽";
+        }
+    }
+
+    function toggleMenu(button) {
+        const menu = button.closest('li').querySelector('.context-menu');
+
+        document.querySelectorAll('.context-menu').forEach(m => m.classList.add('hidden'));
+
+        if (menu.classList.contains('hidden')) {
+            const rect = button.getBoundingClientRect();
+            menu.style.top = `${rect.top}px`;
+            menu.style.left = `${rect.right + 5}px`;
+            menu.classList.remove('hidden');
+        } else {
+            menu.classList.add('hidden');
+        }
+    }
+
+    document.addEventListener('click', function (event) {
+        if (!event.target.closest('.context-menu') && !event.target.classList.contains('menu-btn')) {
+            document.querySelectorAll('.context-menu').forEach(menu => menu.classList.add('hidden'));
+        }
+    });
+
+
+    function editFile(button) {
+        const li = button.closest('li');
+        const filePath = li.dataset.path;
+
+        fetch(`/edit-file/?path=${encodeURIComponent(filePath)}`)
+            .then(res => res.text())
+            .then(content => {
+                const textarea = document.createElement('textarea');
+                textarea.value = content;
+                textarea.style.width = '100%';
+                textarea.style.height = '200px';
+
+                const saveBtn = document.createElement('button');
+                saveBtn.textContent = '💾 Enregistrer';
+                saveBtn.onclick = () => {
+                    fetch('/edit-file/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCSRFToken()
+                        },
+                        body: JSON.stringify({path: filePath, content: textarea.value})
+                    }).then(res => {
+                        alert(res.ok ? "Fichier enregistré !" : "Erreur lors de l'enregistrement");
+                    });
+                };
+
+                const container = document.createElement('div');
+                container.style.position = 'fixed';
+                container.style.top = '10%';
+                container.style.left = '50%';
+                container.style.transform = 'translateX(-50%)';
+                container.style.background = '#fff';
+                container.style.border = '1px solid #ccc';
+                container.style.padding = '15px';
+                container.style.zIndex = 1000;
+                container.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+                container.appendChild(textarea);
+                container.appendChild(saveBtn);
+
+                const closeBtn = document.createElement('button');
+                closeBtn.textContent = '❌ Fermer';
+                closeBtn.style.marginLeft = '10px';
+                closeBtn.onclick = () => container.remove();
+                container.appendChild(closeBtn);
+
+                document.body.appendChild(container);
+            });
+    }
+
+    function deleteItem(button) {
+        const li = button.closest('li');
+        const path = li.getAttribute('data-path');
+
+        if (!confirm(`Supprimer ${path} ?`)) return;
+
+        fetch('/delete/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({path: path})
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    li.remove();
+                } else {
+                    alert('Suppression échouée.');
+                }
+            })
+            .catch(error => alert(error.message));
+    }
+
+    function getCSRFToken() {
+        const name = 'csrftoken';
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            const trimmed = cookie.trim();
+            if (trimmed.startsWith(name + '=')) {
+                return decodeURIComponent(trimmed.substring(name.length + 1));
+            }
+        }
+        return null;
+    }
+
+    let draggedPath = null;
+
+    function dragStart(event) {
+        draggedPath = event.currentTarget.getAttribute('data-path');
+        event.dataTransfer.setData('text/plain', draggedPath);
+    }
+
+    function dragOver(event) {
+        event.preventDefault(); // Obligatoire pour autoriser drop
+    }
+
+    function drop(event) {
+        event.preventDefault();
+        const targetPath = event.currentTarget.getAttribute('data-path');
+
+        if (!draggedPath || draggedPath === targetPath || targetPath.startsWith(draggedPath)) {
+            console.warn("Déplacement invalide");
+            return;
+        }
+
+        fetch("/move_item/", {  // ou {% url 'move_item' %}
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({
+                source_path: draggedPath,
+                destination_path: targetPath
+            })
+        }).then(res => {
+            if (res.ok) window.location.reload();
+            else alert("Erreur de déplacement");
+        });
+    }
+
+    function getCookie(name) {
+        const value = "; " + document.cookie;
+        const parts = value.split("; " + name + "=");
+        if (parts.length === 2) return parts.pop().split(";").shift();
+    }
+
+</script>
+
+</body>
+</html>

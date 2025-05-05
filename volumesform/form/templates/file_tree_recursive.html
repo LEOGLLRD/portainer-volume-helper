@@ -1,0 +1,79 @@
+{% load file_filters %}
+<ul>
+    {% for node in nodes %}
+    <li class="{{ node.type }}" title="{{ node.full_path }}" data-path="{{ node.full_path }}">
+        <div class="item-left">
+            {% if node.type == 'folder' %}
+            <!-- Dossier (draggable + drop target) -->
+            <div class="folder-header"
+                 draggable="true"
+                 ondragstart="dragStart(event)"
+                 ondragover="dragOver(event)"
+                 ondrop="drop(event)"
+                 data-path="{{ node.full_path }}">
+                <span class="folder-icon">📁</span>
+                <span class="arrow" onclick="toggleFolder(this)">▶️</span>
+                <span class="folder-label">{{ node.name }}</span>
+                <span class="folder-rights">{{ node.rights }}</span>
+                <button onclick="toggleMenu(this)" class="menu-btn">⋯</button>
+            </div>
+            {% else %}
+            <!-- Fichier (draggable seulement) -->
+            <div class="folder-header"
+                 draggable="true"
+                 ondragstart="dragStart(event)"
+                 data-path="{{ node.full_path }}">
+                <span class="file-icon">📄</span>
+                <span class="file-label">{{ node.name }}</span>
+                <span class="file-rights">{{ node.rights }}</span>
+                <button onclick="toggleMenu(this)" class="menu-btn">⋯</button>
+            </div>
+            {% endif %}
+        </div>
+        <!-- Menu contextuel -->
+        <div class="context-menu hidden">
+            <span class="lastmodified">Dernière modification : {{ node.lastmodified }}</span>
+            {% if node.type == 'file' %}
+            {% if node|get_extension == ".zip" or node|get_extension == ".rar" or node|get_extension == ".tar.gz" or node|get_extension == ".tar" %}
+            <form action="{% url 'extract_archive' %}" method="post" style="margin-top: 5px;">
+                {% csrf_token %}
+                <input type="hidden" name="archive_path" value="{{ node.full_path }}">
+                <button type="submit">📦 Extraire</button>
+            </form>
+            {% endif %}
+
+            <a href="{% url 'download_file' node.full_path %}">📥 Télécharger</a>
+            <button onclick="editFile(this)">✏️ Éditer</button>
+            <button onclick="deleteItem(this)">🗑️ Supprimer</button>
+            {% endif %}
+
+            {% if node.type == 'folder' %}
+            <form action="{% url 'create_folder' %}" method="post">
+                {% csrf_token %}
+                <input type="hidden" name="parent_path" value="{{ node.full_path }}">
+                <label for="new_folder_name_{{ forloop.counter }}">📂 Créer un dossier :</label>
+                <input type="text" name="folder_name" id="new_folder_name_{{ forloop.counter }}" required>
+                <button type="submit">Créer</button>
+            </form>
+
+            <form action="{% url 'upload_file' %}" method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="target_path" value="{{ node.full_path }}">
+                <label for="file-upload-{{ forloop.counter }}">📤 Déposer un fichier :</label>
+                <input type="file" name="file" id="file-upload-{{ forloop.counter }}" required>
+                <button type="submit">Envoyer</button>
+            </form>
+
+            <button onclick="deleteItem(this)">🗑️ Supprimer</button>
+            {% endif %}
+        </div>
+
+        <!-- Sous-dossiers récursifs -->
+        {% if node.type == 'folder' %}
+        <ul class="hidden">
+            {% include "file_tree_recursive.html" with nodes=node.children %}
+        </ul>
+        {% endif %}
+    </li>
+    {% endfor %}
+</ul>
