@@ -12,6 +12,7 @@ services:
       PYTHONUNBUFFERED: 1
     ports:
       - "0:8000"
+      - "0:22"
 volumes:
   shared-volume:
     name: "shared-volume"

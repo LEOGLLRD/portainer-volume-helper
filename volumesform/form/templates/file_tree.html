@@ -3,8 +3,6 @@
 <head>
     <title>File Tree</title>
     <style>
-        /* Structure des listes */
-        /* Structure des listes */
         ul {
             list-style: none;
             margin: 0;
@@ -16,7 +14,16 @@
             position: relative;
         }
 
-        /* Conteneur de chaque élément (dossier ou fichier) */
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        a:link, a:visited {
+            color: inherit;
+            text-decoration: none;
+        }
+
         .folder-header {
             display: flex;
             align-items: center;
@@ -28,7 +35,6 @@
             box-sizing: border-box;
         }
 
-        /* Partie gauche contenant flèche + icône + nom */
         .item-left {
             display: block;
             align-items: center;
@@ -37,19 +43,16 @@
             flex: 1;
         }
 
-        /* Icônes */
         .folder-icon,
         .file-icon {
             font-size: 18px;
         }
 
-        /* Flèche */
         .arrow {
             cursor: pointer;
             user-select: none;
         }
 
-        /* Libellés */
         .folder-label,
         .file-label {
             white-space: nowrap;
@@ -57,12 +60,10 @@
             text-overflow: ellipsis;
         }
 
-        /* Surbrillance au survol */
         .folder-header:hover {
             background-color: #f0f0f0;
         }
 
-        /* Bouton menu ⋯ */
         .menu-btn {
             background: none;
             border: none;
@@ -71,7 +72,6 @@
             flex-shrink: 0;
         }
 
-        /* Menu déroulant contextuel */
         .context-menu {
             position: fixed;
             background: #f0f0f0;
@@ -106,29 +106,89 @@
             background: #ddd;
         }
 
-        /* Sous-listes */
         li.folder > ul {
             margin-top: 4px;
             padding-left: 15px;
         }
 
-        /* Dossiers fermés */
         .hidden {
             display: none;
         }
 
-        /* Drag & drop */
         .folder-header.drag-over {
             border: 2px dashed #007bff;
             background-color: #e0f0ff;
+        }
+
+        .logout-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 8px 14px;
+            color: #090909;
+            padding: 0.7em 1.7em;
+            font-size: 18px;
+            border-radius: 0.5em;
+            background: #e8e8e8;
+            cursor: pointer;
+            border: 1px solid #e8e8e8;
+            transition: all 0.3s;
+            box-shadow: 6px 6px 12px #c5c5c5, -6px -6px 12px #ffffff;
+        }
+
+        .logout-btn:hover {
+            border: 1px solid white;;
+        }
+
+        .logout-btn:active {
+            box-shadow: 4px 4px 12px #c5c5c5, -4px -4px 12px #ffffff;
+        }
+
+        .messages {
+            position: fixed;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            list-style: none;
+            padding: 0;
+            z-index: 1000;
+        }
+
+        .message {
+            background-color: #ffefef;
+            color: #a33;
+            border: 1px solid #a33;
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            transition: opacity 0.5s ease;
         }
 
 
     </style>
 </head>
 <body>
+
+{% if messages %}
+<ul class="messages">
+    {% for message in messages %}
+    <li class="message {{ message.tags }}">{{ message }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
 <h1>Arborescence de fichiers du dossier : /{{ root_name }}</h1>
 <h3>Référez-vous à votre Docker Compose pour savoir à quel volume ce dossier correspond.</h3>
+<div class="ssh">
+    <form action="{% url 'download_file' '/volumes/.dockerToolboxKey' %}" method="post"
+          style="display: flex; gap: 6px; align-items: center;">
+        {% csrf_token %}
+        <button type="submit">📥 Télécharger votre clé privée SSH</button>
+    </form>
+    <a href="{% url 'logout' %}" class="logout-btn">Se déconnecter</a>
+
+</div>
 <div style="margin-bottom: 1rem;">
     <form action="{% url 'create_folder' %}" method="post" style="display: flex; gap: 6px; align-items: center;">
         {% csrf_token %}
@@ -139,6 +199,39 @@
 </div>
 {% include "file_tree_recursive.html" with nodes=tree %}
 <script>
+
+    let sessionTimeout = {{ request.session.get_expiry_age|default:300 }} * 1000; // ms
+    let warningTime = 60000;
+
+    let timeoutWarning = setTimeout(() => {
+        const confirmStay = confirm("Votre session va expirer. Voulez-vous rester connecté ?");
+        if (confirmStay) {
+            // Reset session timer
+            fetch("{% url 'keep_alive' %}", {
+                method: 'GET',
+                credentials: 'include'
+            }).then(() => {
+                location.reload();
+            });
+        }
+        // Redirect to login page
+        else {
+            window.location.href = "{% url 'login' %}";
+        }
+    }, sessionTimeout - warningTime);
+
+    //Display message (error for example)
+    document.addEventListener('DOMContentLoaded', function () {
+        const messages = document.querySelectorAll('.message');
+
+        messages.forEach(function (message) {
+            message.addEventListener('click', () => {
+                message.remove();
+            });
+        });
+    });
+
+    //Open / Close folder
     function toggleFolder(arrow) {
         event.stopPropagation();
         const ul = arrow.closest('li').querySelector('ul');
@@ -148,6 +241,7 @@
         }
     }
 
+    //Open / Close contextual menu
     function toggleMenu(button) {
         const menu = button.closest('li').querySelector('.context-menu');
 
@@ -169,7 +263,7 @@
         }
     });
 
-
+    //Edit file
     function editFile(button) {
         const li = button.closest('li');
         const filePath = li.dataset.path;
@@ -220,11 +314,12 @@
             });
     }
 
+    //Delete file or folder
     function deleteItem(button) {
         const li = button.closest('li');
         const path = li.getAttribute('data-path');
 
-        if (!confirm(`Supprimer ${path} ?`)) return;
+        if (!confirm(`Supprimer ${path} ? Une fois supprimé il sera irrécupérable !`)) return;
 
         fetch('/delete/', {
             method: 'POST',
@@ -265,7 +360,7 @@
     }
 
     function dragOver(event) {
-        event.preventDefault(); // Obligatoire pour autoriser drop
+        event.preventDefault();
     }
 
     function drop(event) {
@@ -277,7 +372,7 @@
             return;
         }
 
-        fetch("/move_item/", {  // ou {% url 'move_item' %}
+        fetch("/move_item/", {
             method: "POST",
             headers: {
                 'Content-Type': 'application/json',
